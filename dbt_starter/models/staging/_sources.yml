@@ -1,0 +1,102 @@
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw, uncleaned source extracts loaded via `dbt seed`."
+    schema: main
+    tables:
+      - name: raw_transactions
+        description: "One row per payment attempt (in principle — mind the grain)."
+      - name: raw_wallets
+        description: "One row per wallet."
+      - name: raw_merchants
+        description: "One row per merchant."
+
+models:
+  - name: stg_transactions
+    description: >
+      Cleaned, typed transactions. Deduplicated on full-row identity (373 exact
+      duplicates found in the raw source, removed). Flags rows whose wallet_id
+      does not resolve to a known wallet (has_valid_wallet) rather than dropping
+      them, since these still represent real payment attempts/revenue.
+    columns:
+      - name: transaction_id
+        description: "Grain of this model: one row per transaction."
+        tests:
+          - not_null
+          - unique
+      - name: wallet_id
+        description: "FK to stg_wallets. Not guaranteed to resolve (see has_valid_wallet)."
+        tests:
+          - not_null
+          - relationships:
+              config:
+                severity: warn  # expected to have ~1% orphans (743 rows); this
+                                # monitors the RATE rather than hard failing on
+                                # a known, accepted condition.
+              arguments:
+                to: ref('stg_wallets')
+                field: wallet_id
+      - name: merchant_id
+        description: "FK to stg_merchants. Resolves for all rows in this dataset."
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_merchants')
+                field: merchant_id
+      - name: status
+        description: "One of authorized, declined, refunded, reversed."
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['authorized', 'declined', 'refunded', 'reversed']
+      - name: amount_cents
+        description: "Transaction amount in cents, EUR."
+        tests:
+          - not_null
+      - name: created_at
+        description: "Timestamp the transaction occurred. Drives all monthly grouping downstream."
+        tests:
+          - not_null
+      - name: has_valid_wallet
+        description: >
+          False when wallet_id does not resolve to a row in stg_wallets (743
+          rows in the raw data). These are kept, not dropped, so revenue isn't
+          silently understated, downstream models decide how to treat them.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [true, false]
+
+  - name: stg_wallets
+    description: "Cleaned, typed wallets. No duplicate wallet_id found in the raw source."
+    columns:
+      - name: wallet_id
+        description: "Grain of this model: one row per wallet."
+        tests:
+          - not_null
+          - unique
+      - name: created_at
+        description: "Timestamp the wallet was created. Drives signup_cohort_month downstream."
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['active', 'blocked', 'churned']
+
+  - name: stg_merchants
+    description: "Cleaned, typed merchants. Cleanest of the three raw sources."
+    columns:
+      - name: merchant_id
+        description: "Grain of this model: one row per merchant."
+        tests:
+          - not_null
+          - unique
+      - name: segment
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['grocery', 'retail', 'restaurant', 'fuel', 'electronics', 'pharmacy', 'giftcard']
