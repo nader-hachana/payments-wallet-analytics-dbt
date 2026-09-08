@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: fct_transactions
+    description: >
+      Transaction fact table. Grain: one row per transaction (transaction_id).
+      Enriched with the merchant's segment/country. Includes all transactions,
+      including ones with an unresolvable wallet_id (has_valid_wallet = false), 
+      these are kept so revenue totals aren't silently understated. Filter
+      on has_valid_wallet explicitly for any wallet-level analysis.
+    columns:
+      - name: transaction_id
+        description: "Grain of this model: one row per transaction."
+        tests:
+          - not_null
+          - unique
+      - name: merchant_segment
+        description: "The merchant's business segment (grocery, retail, etc.)."
+        tests:
+          - not_null
+      - name: transaction_month
+        description: "Calendar month the transaction was created in, truncated to month start."
+        tests:
+          - not_null
+
+  - name: dim_wallets
+    description: >
+      Wallet dimension. Grain: one row per wallet (wallet_id). Adds
+      signup_cohort_month and is_activated (>=1 authorized transaction within
+      30 days of wallet creation, per the business definition in the data
+      dictionary).
+    columns:
+      - name: wallet_id
+        description: "Grain of this model: one row per wallet."
+        tests:
+          - not_null
+          - unique
+      - name: signup_cohort_month
+        description: "Calendar month the wallet was created in, truncated to month start."
+        tests:
+          - not_null
+      - name: is_activated
+        description: "True if the wallet had an authorized transaction within 30 days of creation."
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [true, false]
