@@ -1,0 +1,24 @@
+name: 'payments_challenge'
+version: '1.0.0'
+config-version: 2
+
+profile: 'payments_challenge'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  payments_challenge:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table
+
+# Keep string columns as strings on seed load; you can refine types in staging.
+seeds:
+  payments_challenge:
+    +quote_columns: false

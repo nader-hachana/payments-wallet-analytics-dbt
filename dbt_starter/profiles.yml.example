@@ -1,0 +1,9 @@
+# Copy this file to `profiles.yml` (same folder) or to ~/.dbt/profiles.yml
+# It stores everything in a single local DuckDB file — no cloud, no license.
+payments_challenge:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: dev.duckdb
+      threads: 4
